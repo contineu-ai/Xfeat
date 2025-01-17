@@ -162,6 +162,70 @@ class XFeat(nn.Module):
 		return d0['keypoints'][idxs[:, 0]].cpu().numpy(), d1['keypoints'][idxs[:, 1]].cpu().numpy(), out['matches'][0].cpu().numpy()
 
 
+
+	@torch.inference_mode()
+	def batch_match_lighterglue(self, d0_list, d1_list, min_conf=0.1):
+		if len(d0_list) != len(d1_list):
+			raise ValueError("d0_list and d1_list must have the same length.")
+		B = len(d0_list)
+		if B == 0:
+			return []
+
+		# Make sure LightGlue is loaded
+		if not self.kornia_available:
+			raise RuntimeError('We rely on kornia for LightGlue. Install with: pip install kornia')
+		elif self.lighterglue is None:
+			from modules.lighterglue import LighterGlue
+			self.lighterglue = LighterGlue()
+
+		kp0_tensor = torch.stack([d0['keypoints'] for d0 in d0_list], dim=0)         
+		kp1_tensor = torch.stack([d1['keypoints'] for d1 in d1_list], dim=0)         
+		desc0_tensor = torch.stack([d0['descriptors'] for d0 in d0_list], dim=0)     
+		desc1_tensor = torch.stack([d1['descriptors'] for d1 in d1_list], dim=0)     
+
+		image_size0 = torch.stack([
+			torch.tensor(d0['image_size'], dtype=torch.float32, device=self.dev)
+			for d0 in d0_list
+		], dim=0)                                                                   
+
+		image_size1 = torch.stack([
+			torch.tensor(d1['image_size'], dtype=torch.float32, device=self.dev)
+			for d1 in d1_list
+		], dim=0)                                                                   
+
+		kp0_tensor = kp0_tensor.to(self.dev)
+		kp1_tensor = kp1_tensor.to(self.dev)
+		desc0_tensor = desc0_tensor.to(self.dev)
+		desc1_tensor = desc1_tensor.to(self.dev)
+
+		data = {
+			'keypoints0': kp0_tensor,
+			'keypoints1': kp1_tensor,
+			'descriptors0': desc0_tensor,
+			'descriptors1': desc1_tensor,
+			'image_size0': image_size0,
+			'image_size1': image_size1
+		}
+
+		out = self.lighterglue(data, min_conf=min_conf)
+		batch_matches = out['matches']  
+		results = []
+		for i in range(B):
+			idxs = batch_matches[i]  
+			mkpts0 = d0_list[i]['keypoints'][idxs[:, 0]].cpu().numpy()
+			mkpts1 = d1_list[i]['keypoints'][idxs[:, 1]].cpu().numpy()
+
+			results.append({
+				'mkpts_0': mkpts0,
+				'mkpts_1': mkpts1,
+				'idxs': idxs.cpu().numpy(),
+			})
+
+		return results
+
+
+
+
 	@torch.inference_mode()
 	def match_xfeat(self, img1, img2, top_k = None, min_cossim = -1):
 		"""

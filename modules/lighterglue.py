@@ -21,8 +21,8 @@ class LighterGlue(nn.Module):
     "flash": True,  # enable FlashAttention if available.
     "mp": False,  # enable mixed precision
     "depth_confidence": -1,  # early stopping, disable with -1
-    "width_confidence": 0.95,  # point pruning, disable with -1
-    "filter_threshold": 0.1,  # match threshold
+    "width_confidence": -1,  # point pruning, disable with -1
+    "filter_threshold": 0.05,  # match threshold
     "weights": None,
     }
 
